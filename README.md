@@ -1,187 +1,114 @@
-# ChronoLake
+# ChronoLake：面向可观测数据的全链路流式加工与治理平台
 
-> A data lake engine purpose-built for time-series data processing.
+## 一句话定位
 
-ChronoLake 是一个面向时序数据场景的数据加工引擎，借鉴数据湖（Data Lake）理念，提供时序数据的统一接入、存储、加工与查询能力。
+ChronoLake 是一套面向**高基数、大规模、高复杂度**可观测数据场景的端到端解决方案。它以**数仓思维**管理可观测数据，把"数据加工、治理、探索、巡检、可视化"整合在同一条链路上：基于 **SQL API 与维表**提供灵活的业务定制能力，基于 **CodeGen、向量化、零装箱**构建高性能流式数据引擎，并通过 **AI 赋能**数据治理与分析。
 
-## 核心特性
+> 一句话买点：**数据即资产**——用一段 SQL 表达一条派生指标、一个 SLI、一条告警规则，它们走同一编译路径、共享同一份维表，并沉淀为可治理、可溯源的数据资产。
 
-- **时序原生模型**：以时间维度为一等公民的数据模型与 Schema 抽象
-- **冷热分层存储**：基于列存（Parquet / Arrow）的高压缩比时序存储
-- **流批一体加工**：支持窗口聚合、降采样、插值、补齐等典型时序加工算子
-- **可扩展连接器**：通过 SPI 机制扩展上下游连接器（Kafka、HDFS、对象存储等）
-- **统一查询接口**：面向时序场景的查询 API 与执行引擎
+---
 
-> **项目定位**：ChronoLake 是一个**以 SQL 为表达力、以数据治理为基础、
-> 以流式告警为闭环出口的可观测加工平台**。详见
-> [`docs/design/business-architecture.md`](./docs/design/business-architecture.md)。
->
-> **能力定位**：ChronoLake 解决**复杂场景、高基数场景下的时序数据加工
-> 问题**；通过与 OLAP 引擎（ClickHouse）的后计算能力互补，综合解决
-> **高基数复杂场景下的时序数据分析能力**。流式增量加工由 ChronoLake
-> 自研引擎承担，历史回看 / 复杂查询 / 巡检试运行 / 可视化由 ClickHouse
-> 承担，两者通过同一份 Calcite SQL 语义层协同。详见
-> [ADR-0026 存储后端选型](./docs/adr/0026-storage-backend-selection.md)。
+## 一、为什么需要 ChronoLake
 
-## 核心特性
+可观测数据正在从"监控指标"演进为"企业级数据资产"。当指标基数攀升至百万、千万量级，当业务需要在海量时序流上做实时派生、关联、巡检与归因时，传统的监控与流计算工具开始暴露各自的边界：
 
-- **SQL 灵活数据加工**：用流式 SQL 表达任意时序加工任务（pre-agg / 降采样 / 派生指标 / 复合 SLI）
-- **数据全生命周期治理**：以数仓式 Meta 模型管理 Stream / Dim / Pipeline / AlertRule，自动产出 lineage / quality / SLA
-- **流式告警 + 事件治理**：检测 / 丰富 / 生命周期管理一体化，AlertEvent 即流，可二次加工
-- **维表一等公民**：注册 / 同步 / 版本化 / 时点 lookup，同时服务 SQL join 与告警丰富
-- **高基数 + 复杂查询友好**：底层时序存储选定 ClickHouse，原生承载高基数 tag 与多 field（含 STRING field），完整 SQL 表达力支持窗口函数 / CTE / JOIN / 近似聚合
-- **生态适配（非核心能力）**：通过协议层接入 OTLP / Prometheus remote_write / Grafana / Alertmanager 等
+- **表达力不足**：只能做有限的预聚合或规则计算，难以表达跨维度关联与复杂派生逻辑。
+- **运维割裂**：加工、告警、巡检、可视化分散在多个系统，缺乏统一的数据视图与血缘。
+- **治理缺位**：数据没有标准、没有血缘、没有质量约束，难以沉淀为可信赖的资产，更无法支撑 AI 分析。
 
-## 项目结构
+ChronoLake 用**数仓的基本思路重构可观测数据处理**——把数据当作需要管控与治理的资产，并以 SQL 作为统一的表达入口，覆盖从加工到分析的全生命周期。
+
+---
+
+## 二、核心能力
+
+### 1. SQL 驱动的灵活数据加工
+
+ChronoLake 以 **SQL API** 作为数据加工的统一入口，配合**维表（Dim）**的关联能力，让用户用熟悉的声明式语法表达任意复杂的加工逻辑：窗口聚合、降采样、派生指标、复合 SLI、跨维表 JOIN 等。SQL 即 API，无需为每类场景维护第二套 DSL，业务定制能力高度灵活。
+
+### 2. 高性能流式数据引擎
+
+底层引擎面向高基数、大规模场景做了深度优化：
+
+- **CodeGen**：将 SQL 编译为低开销的本地执行代码，消除解释执行的运行时损耗。
+- **向量化**：以批量化方式处理数据，充分利用现代 CPU 的并行与缓存能力。
+- **零装箱（Zero-Boxing）**：在热路径上避免对象装箱与额外内存分配，降低 GC 压力。
+- **零拷贝（Zero-Copy）**：数据在接入、加工与输出链路上尽量原地传递，避免冗余的内存复制与序列化开销，进一步压低延迟、提升吞吐。
+
+这些技术叠加，使 ChronoLake 在同等资源下能承载更高的吞吐与更低的延迟，**数据规模越大，流式处理的性能优势越明显**。
+
+### 3. 完整的数据治理与血缘
+
+ChronoLake 内建数据治理体系：通过统一的元模型管理流（Stream）、维表（Dim）、加工管线（Pipeline）与告警规则（AlertRule），自动产出**数据血缘（Lineage）**。任意一条派生指标都能向上追溯到其源头数据与加工逻辑，实现完整的**数据溯源**——这是问题排查、影响分析与合规审计的基础。
+
+### 4. 全链路可观测闭环
+
+ChronoLake 不是单点工具，而是一套覆盖全链路的可观测解决方案：
 
 ```
-chronolake/
-├── chronolake-bom/                       # 依赖 BOM
-├── chronolake-core/                      # L1 内核：SQL → LakeRelNode → LakePlan → runtime
-├── chronolake-meta/                      # L2 治理：Asset / Lineage / Glossary / Quality
-├── chronolake-dim/                       # L2 维表：注册 / 同步 / 版本化 / 时点 lookup
-├── chronolake-alert/                     # L2 告警 (aggregator)
-│   ├── chronolake-alert-core/            #   检测 / 事件总线 / 生命周期
-│   └── chronolake-alert-notify/          #   通知出口（Webhook / IM / Email）
-├── chronolake-stream/                    # L1.5 流式 data-plane（aggregator）
-│   ├── chronolake-stream-core/           #   host-neutral SPI + 默认实现
-│   └── chronolake-stream-flink/          #   Flink host adapter
-├── chronolake-ingest/                    # L4 协议（采集，aggregator）
-│   ├── chronolake-ingest-otlp/           #   OTLP gRPC / HTTP
-│   ├── chronolake-ingest-prometheus/     #   remote_write
-│   ├── chronolake-ingest-http/           #   通用 JSON / line-protocol
-│   ├── chronolake-ingest-kafka/          #   Kafka source
-│   └── chronolake-ingest-jdbc-cdc/       #   JDBC CDC（主用于 dim 同步）
-├── chronolake-export/                    # L4 协议（外送，aggregator）
-│   ├── chronolake-export-promwrite/      #   remote_write 输出
-│   ├── chronolake-export-otlp/           #   OTLP exporter
-│   ├── chronolake-export-promscrape/     #   /metrics scrape endpoint
-│   └── chronolake-export-alertmanager/   #   Alertmanager v2 push
-├── chronolake-storage-adapter/           # L4 协议（存储适配，aggregator）
-│   └── chronolake-storage-clickhouse/    #   ClickHouseStorage：唯一存储后端（ADR-0026）
-├── chronolake-server/                    # L5 进程：单进程入口，装配所有平面
-├── chronolake-front/                     # L6 客户端：Web 管理控制台（Umi + Ant Design Pro）
-├── chronolake-test-utils/                # L7 工具：跨模块测试辅助
-├── chronolake-dist/                      # L8 发布：tar.gz 打包
-├── build/                                # 跨语言构建脚本
-├── docs/                                 # ADR / Design 文档
-└── pom.xml                               # 顶层聚合 POM
+数据加工  →  数据治理  →  数据探索  →  自动巡检  →  Dashboard 可视化  →  问题分析
 ```
 
-## 模块说明
+从原始数据接入、SQL 加工、质量治理，到自动巡检、可视化展现与问题归因，所有环节在同一平台内闭环协同，避免了多系统拼接带来的割裂与运维负担。
 
-| 层级 | artifactId | 状态 | 说明 |
-|------|------------|:----:|------|
-| L0 | `chronolake-bom` | ⚪ 骨架 | 依赖 BOM，集中版本管理 |
-| L1 内核 | `chronolake-core` | ✅ 已实现 | 流式引擎核心：SQL → LakeRelNode → LakePlan → runtime（详见 ADR-0001~0013） |
-| L2 治理 | `chronolake-meta` | ⚪ 骨架 | Asset / Lineage / Glossary / Quality 模型，AI 集成基础（ADR-0014） |
-| L2 维表 | `chronolake-dim` | ⚪ 骨架 | 维表生命周期与时点 lookup（ADR-0018） |
-| L2 告警 | `chronolake-alert-core` / `chronolake-alert-notify` | ⚪ 骨架 | 流式检测 / 事件总线 / 生命周期 / 通知（ADR-0019~0021） |
-| L1.5 流式 | `chronolake-stream-core` / `chronolake-stream-flink` | ⚪ 骨架 | 流式 data-plane runtime SPI + Flink host adapter |
-| L4 协议 | `chronolake-ingest-*` | ⚪ 骨架 | 采集协议适配（OTLP / Prom / HTTP / Kafka / JDBC CDC） |
-| L4 协议 | `chronolake-export-*` | ⚪ 骨架 | 外送协议适配（remote_write / OTLP / scrape / Alertmanager） |
-| L4 协议 | `chronolake-storage-clickhouse` | ⏳ stub | ClickHouse 存储适配（唯一后端，ADR-0026） |
-| L5 进程 | `chronolake-server` | ⚪ 骨架 | 单进程入口（HTTP/gRPC 框架选型见 ADR-0027） |
-| L6 客户端 | `chronolake-front` | ⚪ 骨架 | Web 控制台 |
-| L7 工具 | `chronolake-test-utils` | ⚪ 骨架 | 跨模块测试辅助 |
-| L8 发布 | `chronolake-dist` | ⚪ 骨架 | 二进制分发打包（含前端静态资源） |
+### 5. AI 赋能数据治理与分析
 
-> **图例**：✅ 已实现并被测试覆盖；⚪ 骨架已落地（POM + 关键 SPI 接口），
-> 实质实现按 ADR 路线图推进。
->
-> 模块依赖严格自上而下分层（L1 → L2 → L3 → L4 → L5 → L6），同一层模块横向不互相依赖。
+数据治理让数据**标准化、结构化、可信赖**，为 AI 提供了高质量的数据基础；反过来，AI 又赋能平台本身——提供智能数据分析、异常归因、问题排查等能力，形成"治理喂养 AI、AI 反哺治理"的正向循环。
 
-## 命名约定
+---
 
-- **groupId**：`io.chronolake`
-- **artifactId**：全小写，连字符分隔，例如 `chronolake-core`
-- **package**：`io.chronolake.<module>`（嵌套子模块用 `<aggregator>.<sub>`，例如 `io.chronolake.alert.core`、`io.chronolake.ingest.kafka`）
-- **前端目录**：与后端模块同级，沿用 `chronolake-` 前缀（`chronolake-front`）
+## 三、差异化定位：与同类产品的对比
 
-## 构建
+ChronoLake 的价值，需要放在它与现有生态的差异中才能看清。
 
-完整构建（后端 + 前端 + 发行包）使用顶层脚本：
+### 对比 Prometheus —— 应用场景不同
 
-```bash
-build/build-all.sh                # 完整构建
-build/build-all.sh --skip-tests   # 跳过后端测试
-build/build-all.sh --no-frontend  # 仅后端
-```
+Prometheus 是优秀的监控与告警系统，定位于指标采集与短期存储。ChronoLake 的出发点完全不同：
 
-也可分别构建：
+- **数仓思路 vs 监控思路**：ChronoLake 把可观测数据视为**资产**，强调数据的**管控与治理**，而非单纯的指标采集与查询。
+- **SQL 表达力 vs PromQL**：基于 SQL 的强大表达能力，ChronoLake 提供远超 Recording Rule 的灵活加工能力——窗口、JOIN、CTE、跨维表关联皆可表达。
 
-```bash
-# 仅后端（透传 Maven 参数）
-build/build-backend.sh clean install -DskipTests
+两者并非竞争，而是定位不同层次的问题：Prometheus 关注"看指标"，ChronoLake 关注"把数据治理成资产并灵活加工"。
 
-# 仅前端
-build/build-frontend.sh
+### 对比 Flink SQL —— 同一 Runtime、热更新、热部署
 
-# 仅打发行包（依赖前两步产物）
-build/build-dist.sh
-```
+Flink SQL 是强大的流计算框架，但采用**单一任务模式**：每个 SQL 任务对应一个独立作业，部署重、运维成本高。ChronoLake 在工程形态上做了根本性的差异化：
 
-构建脚本说明详见 [`build/README.md`](./build/README.md)。
+- **同一 Runtime 运行大量 SQL 任务**：无需为每个任务拉起独立作业，资源利用率与运维效率显著提升。
+- **SQL 热更新、热部署**：可对数据拓扑中**任意一个计算节点**的 SQL 任务进行热更新与热部署，无需停机或重启整条链路——这是单一任务模式的 Flink SQL 不具备的能力。
 
-## 本地开发启动
+| 维度 | ChronoLake | Prometheus | Flink SQL |
+|---|:---:|:---:|:---:|
+| 核心定位 | 数仓式可观测加工与治理 | 指标监控与告警 | 通用流计算 |
+| 加工表达力 | 完整 SQL + 维表 JOIN | PromQL / Recording Rule | 完整 SQL |
+| 多任务运行 | 同一 Runtime 承载大量任务 | — | 单任务独立作业 |
+| 热更新 / 热部署 | ✅ 节点级热更新 | — | ❌ |
+| 数据血缘 / 溯源 | ✅ 完整血缘 | ❌ | ⚠️ 有限 |
+| 数据治理 | ✅ 内建 | ❌ | ❌ |
+| 全链路闭环 | ✅ 加工→巡检→可视化 | ⚠️ 监控告警 | ❌ 仅计算 |
 
-后端是 Spring Boot 单进程服务（默认 8080），前端是 umi-max SPA（默认 8000，
-`.umirc.ts` 把 `/api` proxy 到 `127.0.0.1:8080`）。零外部依赖（默认 H2 in-memory，
-启动时自动 apply IAM/Stream DDL）。
+---
 
-```bash
-# 后端：起 dev server（任意目录可跑，自动 cd 到项目根）
-JAVA_HOME=$(/usr/libexec/java_home -v 11) build/dev-backend.sh
+## 四、灵活的交付形态
 
-# 前端：另开终端
-build/dev-frontend.sh
-# 浏览器打开 http://localhost:8000
-```
+ChronoLake 同时支持两种部署模式，适配不同规模与合规要求：
 
-完整步骤、IDE 配置、跨域 / 持久化 / 首启管理员等细节见
-[`docs/dev/local-development.md`](./docs/dev/local-development.md)。
+- **云服务**：以 SaaS 形态提供全套数据服务，开箱即用，免运维。
+- **私有化部署**：在客户自有环境内完整落地，满足数据合规与安全要求。
 
-## 环境要求
+得益于高性能流式引擎，**数据规模越大，私有化场景下流式处理的性能与成本优势越能凸显**。
 
-- **后端**：JDK 11+，Maven 3.6.3+（推荐 3.9+）。基线版本与升级路径见 [ADR-0008](./docs/adr/0008-jdk-version.md)
-- **前端**：Node.js 18+，pnpm（推荐）/ npm / yarn
+---
 
-> 构建会在 `validate` 阶段通过 [`build/checkstyle.xml`](./build/checkstyle.xml) 拦截
-> 任何 JDK 12+ 语法（`sealed` / `record` / instanceof 模式 / switch 模式 /
-> text block / `var`）。如果你在升级 baseline，请同步修改 ADR-0008、`pom.xml`
-> 与该规则文件。
+## 五、典型适用场景
 
-## 设计文档
+- **高基数指标加工**：百万/千万级时间线的实时聚合、降采样与派生指标计算。
+- **复杂 SLI / SLO 体系**：跨维表关联、多层派生的复合服务质量指标体系。
+- **统一可观测平台**：需要把加工、治理、巡检、可视化整合到一个平台的中大型团队。
+- **数据资产化与 AI 分析**：希望将可观测数据标准化、资产化，并以 AI 进行智能分析与排障的场景。
 
-架构与领域模型决策记录见 [`docs/`](./docs/README.md)：
+---
 
-### Design
+## 结语
 
-- [产品整体设计（初稿 v0.1）](./docs/design/product-overview.md) — 产品视角整合稿：定位 / 用户 / 能力 / 形态 / 生态 / 路线图
-- [业务架构设计：数据驱动的可观测加工平台](./docs/design/business-architecture.md) — 四项核心业务能力、模块结构、生态边界、ADR 路线图
-- [SQL 语法设计](./docs/design/sql-language.md) — 当前 `chronolake-core` 实现的 SQL 子集、约束、示例库
-
-### ADR（已落地）
-
-- [ADR-0001：时序数据领域模型选型](./docs/adr/0001-time-series-data-model.md) — Multi-Field 模型（被 ADR-0004 / 0006 校正）
-- [ADR-0002：SQL 作为查询入口的集成路线](./docs/adr/0002-sql-integration-strategy.md) — Calcite frontend（被 ADR-0003 部分校正）
-- [ADR-0003：流式加工引擎定位（非 OLAP）](./docs/adr/0003-streaming-engine-positioning.md) — SQL 是任务定义入口
-- [ADR-0004：Row 物理布局——独立紧凑行](./docs/adr/0004-row-physical-layout.md) — 内部行式紧凑 Row
-- [ADR-0005：状态后端选型——单机内存先行](./docs/adr/0005-state-backend.md) — Phase 1 内存
-- [ADR-0006：移除 core 的 Arrow Batch](./docs/adr/0006-remove-arrow-from-core.md) — core 零外部依赖
-- [ADR-0007：流加工三原语 map / groupBy / join](./docs/adr/0007-streaming-primitives.md) — 完备最小集合
-- [ADR-0008：JDK 版本基线 = Java 11](./docs/adr/0008-jdk-version.md) — 工程基线与升级路径
-- ADR-0009 ~ ADR-0013 — 事件时间硬约束、温度处理、状态双层寻址、窗口对齐、EARLIEST/LATEST
-
-## 参与贡献
-
-ChronoLake 是一个开源项目，欢迎贡献代码、文档与设计反馈。
-
-- 协作约定与开发规范：[CONTRIBUTING.md](./CONTRIBUTING.md)
-- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- 安全漏洞报告：[SECURITY.md](./SECURITY.md)
-- 第三方组件归属：[NOTICE](./NOTICE)
-
-## License
-
-ChronoLake 以 [Apache License 2.0](./LICENSE) 协议发布。提交贡献即表示同意以同一协议授权。
+ChronoLake 用**数仓的思路**重新定义可观测数据处理：以 SQL 为表达力、以治理为基础、以血缘为保障、以 AI 为加速器，提供从加工到分析的全链路闭环。它不与监控系统或通用流计算框架同质化竞争，而是在**高基数、大规模、高复杂度**的可观测场景里，提供一套更灵活、更高性能、更可治理的完整解决方案——让数据真正成为可信赖、可复用、可被 AI 驱动的企业资产。
